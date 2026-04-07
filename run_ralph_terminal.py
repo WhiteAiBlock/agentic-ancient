@@ -128,8 +128,8 @@ def load_self_learning_engine():
         engine = SelfLearningEngine()
         log.info(f"{GREEN}[BRAIN] Self-learning engine loaded ✓{RESET}")
         return engine
-    except ImportError:
-        log.warning("[BRAIN] self_learning_engine.py not found — skipping evolution")
+    except Exception as exc:
+        log.warning(f"[BRAIN] self-learning unavailable ({exc}) — skipping evolution")
         return None
 
 
@@ -142,10 +142,12 @@ class RalphTerminalLoop:
         strategies: List[str] = None,
         webhook_url: str = None,
         tax_url: str = None,
+        max_cycles: Optional[int] = None,
     ):
-        self.interval = interval
+        self.interval = max(1, interval)
         self.webhook_url = webhook_url
         self.tax_url = tax_url or "http://localhost:3000/api/tax"
+        self.max_cycles = max_cycles
         self.cycle = 0
         self.running = False
         self.session_pnl = 0.0
@@ -239,6 +241,10 @@ class RalphTerminalLoop:
         try:
             while self.running:
                 await self.run_cycle()
+                if self.max_cycles is not None and self.cycle >= self.max_cycles:
+                    log.info(f"{YELLOW}[RALPH] Reached max cycles ({self.max_cycles}), stopping.{RESET}")
+                    self.running = False
+                    break
                 if self.running:
                     log.info(f"{DIM}Sleeping {self.interval}s…{RESET}")
                     await asyncio.sleep(self.interval)
@@ -257,6 +263,8 @@ class RalphTerminalLoop:
 def main():
     parser = argparse.ArgumentParser(description="Ralph Terminal Loop")
     parser.add_argument("--interval", type=int, default=30, help="Seconds between cycles")
+    parser.add_argument("--max-cycles", type=int, default=1,
+                        help="Stop automatically after N cycles (default: 1 for safe terminal runs, use 0 for unlimited)")
     parser.add_argument("--strategies", type=str, default="yield,signal,liquidity,zk,arbitrage",
                         help="Comma-separated strategy names")
     parser.add_argument("--webhook", type=str, default="http://localhost:8765/webhook",
@@ -264,12 +272,15 @@ def main():
     parser.add_argument("--tax-url", type=str, default="http://localhost:3000/api/tax",
                         help="Tax API URL")
     args = parser.parse_args()
+    parsed_strategies = [s.strip() for s in args.strategies.split(",") if s.strip()]
+    max_cycles = None if args.max_cycles == 0 else max(1, args.max_cycles)
 
     loop_runner = RalphTerminalLoop(
         interval=args.interval,
-        strategies=args.strategies.split(","),
+        strategies=parsed_strategies,
         webhook_url=args.webhook,
         tax_url=args.tax_url,
+        max_cycles=max_cycles,
     )
 
     asyncio.run(loop_runner.start())

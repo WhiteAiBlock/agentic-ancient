@@ -39,7 +39,6 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 
 log = logging.getLogger(__name__)
 
